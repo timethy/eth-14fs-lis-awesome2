@@ -1,0 +1,6 @@
+.virtualenv
+project_data/validate_y.txt
+report/report.aux
+report/report.synctex.gz
+report/report.log
+report/report.out
