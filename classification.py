@@ -108,8 +108,8 @@ def regress(fn, name, X, Y, Xval, Xtestsub):
     class1 = fn(Xtrain, Ytrain[:, 0])
     class2 = fn(Xtrain, Ytrain[:, 1])
 
-    print 'SCORE: ', name, ',trainset ', sumscore_classifier(class1, class2, Xtrain, Ytrain)
-    print 'SCORE: ', name, ',test ', sumscore_classifier(class1, class2, Xtest, Ytest)
+    print 'SCORE:', name, ' - trainset ', sumscore_classifier(class1, class2, Xtrain, Ytrain)
+    print 'SCORE:', name, ' - test ', sumscore_classifier(class1, class2, Xtest, Ytest)
 
     predict_and_print('validate_y_' + name, class1, class2, Xval)
     predict_and_print('test_y_' + name, class1, class2, Xtestsub)
