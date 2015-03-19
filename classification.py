@@ -86,7 +86,7 @@ def knn_classifier(Xtrain, Ytrain):
     return grid_search.best_estimator_
 
 
-def regress_knn(X, Y, Xval, Xtest):
+def regress_knn(X, Y, Xval, Xtestsub):
     # always split training and test data!
     Xtrain, Xtest, Ytrain, Ytest = skcv.train_test_split(X, Y, train_size=0.8)
     print 'DEBUG: data split up into train and test data'
@@ -98,7 +98,7 @@ def regress_knn(X, Y, Xval, Xtest):
     print 'score on test: ', sumscore_classifier(class1, class2, Xtest, Ytest)
 
     predict_and_print('validate_y_knn', class1, class2, Xval)
-    predict_and_print('test_y_knn', class1, class2, Xtest)
+    predict_and_print('test_y_knn', class1, class2, Xtestsub)
 
 def read_and_regress(feature_fn):
     Xo = read_path('project_data/train.csv')
