@@ -26,16 +26,6 @@ def sumscore_classifier(class1, class2, X, Y):
     return sumscore(Y[:, 0], Y[:, 1], class1.predict(X), class2.predict(X))
 
 
-def indicators(vals, x):
-    y = []
-    for val in vals:
-        if int(x)== int(val):
-            y.append(1)
-        else:
-            y.append(-1)
-    return y
-
-
 def read_path(inpath):
     X = []
     with open(inpath, 'r') as fin:
@@ -60,6 +50,10 @@ def read_features(X, features_fn):
 
 # Assume that all values in x are ready-to-use features (i. e. no timestamps)
 def simple_implementation(x):
+    x = map(float, x)
+    x.append(x[0]*x[1])
+    x.append(x[5]*x[6])
+#    x[3] = np.abs(x[3])
     return x
 
 
@@ -75,9 +69,15 @@ def predict_and_print(name, class1, class2, X):
     np.savetxt('project_data/' + name + '.txt', Ypred.T, fmt='%i', delimiter=',')
 
 
+def lin_classifier(Xtrain, Ytrain):
+    classifier = LinearSVC()
+    classifier.fit(Xtrain, Ytrain)
+    return classifier
+
+
 def tree_classifier(Xtrain, Ytrain):
-    param_grid = {'n_estimators': range(1, 50, 2)}
-    classifier = RandomForestClassifier()
+    param_grid = {'n_estimators': range(5, 51, 5), 'max_depth': range(10, 101, 10)}
+    classifier = RandomForestClassifier(n_jobs=4)
     classifier.fit(Xtrain, Ytrain)
     print 'TREE: classifier.score: ', score(Ytrain, classifier.predict(Xtrain))
     scorefun = skmet.make_scorer(lambda x, y: -score(x, y))
@@ -85,11 +85,10 @@ def tree_classifier(Xtrain, Ytrain):
     grid_search.fit(Xtrain, Ytrain)
     print 'TREE: grid_search.best_estimator_: ', grid_search.best_estimator_
     return grid_search.best_estimator_
-    return classifier
 
 
 def knn_classifier(Xtrain, Ytrain):
-    param_grid = {'n_neighbors': range(1, 15), 'weights': ['uniform', 'distance']}
+    param_grid = {'n_neighbors': [4, 8, 16], 'weights': ['uniform', 'distance']}
     classifier = KNeighborsClassifier(algorithm='auto')
     classifier.fit(Xtrain, Ytrain)
     print 'KNN: classifier.score: ', score(Ytrain, classifier.predict(Xtrain))
@@ -115,24 +114,38 @@ def regress(fn, name, X, Y, Xval, Xtestsub):
     predict_and_print('test_y_' + name, class1, class2, Xtestsub)
 
 
+def regress_no_split(fn, name, X, Y, Xval, Xtestsub):
+    class1 = fn(X, Y[:, 0])
+    class2 = fn(X, Y[:, 1])
+
+    print 'SCORE:', name, ' - all ', sumscore_classifier(class1, class2, X, Y)
+
+    score_fn = skmet.make_scorer(score)
+    scores = skcv.cross_val_score(class1, X, Y[:, 0], scoring=score_fn, cv=5)
+    print 'SCORE:', name, ' - (cv) mean : ', np.mean(scores), ' +/- ', np.std(scores)
+    scores = skcv.cross_val_score(class2, X, Y[:, 1], scoring=score_fn, cv=5)
+    print 'SCORE:', name, ' - (cv) mean : ', np.mean(scores), ' +/- ', np.std(scores)
+
+    predict_and_print('validate_y_' + name, class1, class2, Xval)
+    predict_and_print('test_y_' + name, class1, class2, Xtestsub)
+
+
 def read_and_regress(feature_fn):
     Xo = read_path('project_data/train.csv')
     print 'data points: ', len(Xo)
 
     Y = np.genfromtxt('project_data/train_y.csv', delimiter=',')
-    print 'DEBUG: data read'
     X = read_features(Xo, feature_fn)
     print 'DEBUG: total nb of base-functions: %d' % np.shape(X)[1]
-    print 'DEBUG: transform training data features'
     Xvalo = read_path('project_data/validate.csv')
     Xtesto = read_path('project_data/test.csv')
-    print 'DEBUG: transform validation data features'
     Xval = read_features(Xvalo, feature_fn)
     Xtest = read_features(Xtesto, feature_fn)
-    print 'DEBUG: features transformed'
+    print 'DEBUG: read in everything'
 
-#   regress(knn_classifier, 'knn', X, Y, Xval, Xtest)
-    regress(tree_classifier, 'tree', X, Y, Xval, Xtest)
+    regress(lin_classifier, 'lin', X, Y, Xval, Xtest)
+    regress(knn_classifier, 'knn', X, Y, Xval, Xtest)
+    regress_no_split(tree_classifier, 'tree', X, Y, Xval, Xtest)
 
 
 if __name__ == "__main__":
