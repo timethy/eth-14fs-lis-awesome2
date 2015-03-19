@@ -8,6 +8,7 @@ import sklearn.grid_search as skgs
 from sklearn import linear_model
 from sklearn.svm import LinearSVC
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors.dist_metrics import DistanceMetric
 
 
@@ -74,31 +75,45 @@ def predict_and_print(name, class1, class2, X):
     np.savetxt('project_data/' + name + '.txt', Ypred.T, fmt='%i', delimiter=',')
 
 
+def tree_classifier(Xtrain, Ytrain):
+    param_grid = {'n_estimators': range(1, 50, 2)}
+    classifier = RandomForestClassifier()
+    classifier.fit(Xtrain, Ytrain)
+    print 'TREE: classifier.score: ', score(Ytrain, classifier.predict(Xtrain))
+    scorefun = skmet.make_scorer(lambda x, y: -score(x, y))
+    grid_search = skgs.GridSearchCV(classifier, param_grid, scoring=scorefun, cv=5)
+    grid_search.fit(Xtrain, Ytrain)
+    print 'TREE: grid_search.best_estimator_: ', grid_search.best_estimator_
+    return grid_search.best_estimator_
+    return classifier
+
+
 def knn_classifier(Xtrain, Ytrain):
     param_grid = {'n_neighbors': range(1, 15), 'weights': ['uniform', 'distance']}
     classifier = KNeighborsClassifier(algorithm='auto')
     classifier.fit(Xtrain, Ytrain)
-    print 'classifier.score: ', score(Ytrain, classifier.predict(Xtrain))
+    print 'KNN: classifier.score: ', score(Ytrain, classifier.predict(Xtrain))
     scorefun = skmet.make_scorer(lambda x, y: -score(x, y))
     grid_search = skgs.GridSearchCV(classifier, param_grid, scoring=scorefun, cv=5)
     grid_search.fit(Xtrain, Ytrain)
-    print 'grid_search.best_estimator_: ', grid_search.best_estimator_
+    print 'KNN: grid_search.best_estimator_: ', grid_search.best_estimator_
     return grid_search.best_estimator_
 
 
-def regress_knn(X, Y, Xval, Xtestsub):
+def regress(fn, name, X, Y, Xval, Xtestsub):
     # always split training and test data!
     Xtrain, Xtest, Ytrain, Ytest = skcv.train_test_split(X, Y, train_size=0.8)
     print 'DEBUG: data split up into train and test data'
 
-    class1 = knn_classifier(Xtrain, Ytrain[:, 0])
-    class2 = knn_classifier(Xtrain, Ytrain[:, 1])
+    class1 = fn(Xtrain, Ytrain[:, 0])
+    class2 = fn(Xtrain, Ytrain[:, 1])
 
-    print 'score on trainset: ', sumscore_classifier(class1, class2, Xtrain, Ytrain)
-    print 'score on test: ', sumscore_classifier(class1, class2, Xtest, Ytest)
+    print 'SCORE: ', name, ',trainset ', sumscore_classifier(class1, class2, Xtrain, Ytrain)
+    print 'SCORE: ', name, ',test ', sumscore_classifier(class1, class2, Xtest, Ytest)
 
-    predict_and_print('validate_y_knn', class1, class2, Xval)
-    predict_and_print('test_y_knn', class1, class2, Xtestsub)
+    predict_and_print('validate_y_' + name, class1, class2, Xval)
+    predict_and_print('test_y_' + name, class1, class2, Xtestsub)
+
 
 def read_and_regress(feature_fn):
     Xo = read_path('project_data/train.csv')
@@ -116,7 +131,8 @@ def read_and_regress(feature_fn):
     Xtest = read_features(Xtesto, feature_fn)
     print 'DEBUG: features transformed'
 
-    regress_knn(X, Y, Xval, Xtest)
+#   regress(knn_classifier, 'knn', X, Y, Xval, Xtest)
+    regress(tree_classifier, 'tree', X, Y, Xval, Xtest)
 
 
 if __name__ == "__main__":
