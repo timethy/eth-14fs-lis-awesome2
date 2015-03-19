@@ -45,6 +45,7 @@ def read_features(X, features_fn):
         if i % 100000 == 0:
             print str(i) + ' of ' + str(x_rows) + ' rows processed...'
         i += 1
+    print str(i) + ' of ' + str(x_rows) + ' rows processed...'
     return np.matrix(M)
 
 
@@ -90,7 +91,7 @@ def tree_classifier(Xtrain, Ytrain):
 
 
 def knn_classifier(Xtrain, Ytrain):
-    param_grid = {'n_neighbors': [4, 8, 16], 'weights': ['uniform', 'distance']}
+    param_grid = {'n_neighbors': [4, 8, 16], 'weights': ['uniform']}
     classifier = KNeighborsClassifier(algorithm='auto')
     classifier.fit(Xtrain, Ytrain)
     print 'KNN: classifier: ', classifier
@@ -124,9 +125,9 @@ def regress_no_split(fn, name, X, Y, Xval, Xtestsub):
 
     score_fn = skmet.make_scorer(score)
     scores = skcv.cross_val_score(class1, X, Y[:, 0], scoring=score_fn, cv=5)
-    print 'SCORE:', name, ' - (cv) mean : ', np.mean(scores), ' +/- ', np.std(scores)
+    print 'SCORE:', name, ' - (cv) mean on 1 : ', np.mean(scores), ' +/- ', np.std(scores)
     scores = skcv.cross_val_score(class2, X, Y[:, 1], scoring=score_fn, cv=5)
-    print 'SCORE:', name, ' - (cv) mean : ', np.mean(scores), ' +/- ', np.std(scores)
+    print 'SCORE:', name, ' - (cv) mean on 2 : ', np.mean(scores), ' +/- ', np.std(scores)
 
     predict_and_print('validate_y_' + name, class1, class2, Xval)
     predict_and_print('test_y_' + name, class1, class2, Xtestsub)
