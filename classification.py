@@ -79,11 +79,13 @@ def tree_classifier(Xtrain, Ytrain):
     param_grid = {'n_estimators': range(5, 51, 5), 'max_depth': range(10, 101, 10)}
     classifier = RandomForestClassifier(n_jobs=4)
     classifier.fit(Xtrain, Ytrain)
+    print 'TREE: classifier: ', classifier
     print 'TREE: classifier.score: ', score(Ytrain, classifier.predict(Xtrain))
     scorefun = skmet.make_scorer(lambda x, y: -score(x, y))
     grid_search = skgs.GridSearchCV(classifier, param_grid, scoring=scorefun, cv=5)
     grid_search.fit(Xtrain, Ytrain)
-    print 'TREE: grid_search.best_estimator_: ', grid_search.best_estimator_
+    print 'TREE: best_estimator_: ', grid_search.best_estimator_
+    print 'TREE: best_estimator_.score: ', score(Ytrain, grid_search.predict(Xtrain))
     return grid_search.best_estimator_
 
 
@@ -91,18 +93,18 @@ def knn_classifier(Xtrain, Ytrain):
     param_grid = {'n_neighbors': [4, 8, 16], 'weights': ['uniform', 'distance']}
     classifier = KNeighborsClassifier(algorithm='auto')
     classifier.fit(Xtrain, Ytrain)
+    print 'KNN: classifier: ', classifier
     print 'KNN: classifier.score: ', score(Ytrain, classifier.predict(Xtrain))
     scorefun = skmet.make_scorer(lambda x, y: -score(x, y))
     grid_search = skgs.GridSearchCV(classifier, param_grid, scoring=scorefun, cv=5)
     grid_search.fit(Xtrain, Ytrain)
-    print 'KNN: grid_search.best_estimator_: ', grid_search.best_estimator_
+    print 'KNN: best_estimator_: ', grid_search.best_estimator_
+    print 'KNN: best_estimator_.score: ', score(Ytrain, grid_search.predict(Xtrain))
     return grid_search.best_estimator_
 
 
 def regress(fn, name, X, Y, Xval, Xtestsub):
-    # always split training and test data!
     Xtrain, Xtest, Ytrain, Ytest = skcv.train_test_split(X, Y, train_size=0.8)
-    print 'DEBUG: data split up into train and test data'
 
     class1 = fn(Xtrain, Ytrain[:, 0])
     class2 = fn(Xtrain, Ytrain[:, 1])
