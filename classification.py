@@ -9,6 +9,11 @@ from sklearn import linear_model
 from sklearn.svm import LinearSVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
+
+from sklearn import svm
+from sklearn.grid_search import GridSearchCV
+from sklearn.cross_validation import StratifiedKFold
+from sklearn import preprocessing
 from sklearn.neighbors.dist_metrics import DistanceMetric
 
 
@@ -70,13 +75,13 @@ def predict_and_print(name, class1, class2, X):
     np.savetxt('project_data/' + name + '.txt', Ypred.T, fmt='%i', delimiter=',')
 
 
-def lin_classifier(Xtrain, Ytrain):
+def lin_classifier(Xtrain, Ytrain, opt=0):
     classifier = LinearSVC()
     classifier.fit(Xtrain, Ytrain)
     return classifier
 
 
-def tree_classifier(Xtrain, Ytrain):
+def tree_classifier(Xtrain, Ytrain, opt=0):
     param_grid = {'n_estimators': range(5, 51, 5), 'max_depth': range(10, 101, 10)}
     classifier = RandomForestClassifier(n_jobs=4)
     classifier.fit(Xtrain, Ytrain)
@@ -90,7 +95,7 @@ def tree_classifier(Xtrain, Ytrain):
     return grid_search.best_estimator_
 
 
-def knn_classifier(Xtrain, Ytrain):
+def knn_classifier(Xtrain, Ytrain, opt=0):
     param_grid = {'n_neighbors': [4, 8, 16], 'weights': ['uniform']}
     classifier = KNeighborsClassifier(algorithm='auto')
     classifier.fit(Xtrain, Ytrain)
@@ -103,23 +108,41 @@ def knn_classifier(Xtrain, Ytrain):
     print 'KNN: best_estimator_.score: ', score(Ytrain, grid_search.predict(Xtrain))
     return grid_search.best_estimator_
 
+def svm_classifier(Xtrain,Ytrain,opt=0):
+    #param_grid = {'weights': ['uniform']}      #standard assumption by svm
+    #C_range = np.logspace(-3,3,11)
+    #gamma_range = np.logspace(-3,3,11)
+    #cv = StratifiedKFold(y=Ytrain, n_folds=3)
+    #param_grid = dict(gamma = gamma_range, C = C_range)
+    #grid = GridSearchCV(svm.SVC(verbose=True), param_grid = param_grid, cv=cv, verbose=5, n_jobs=4)
+    if opt == 0:
+        classifier = svm.SVC(gamma = 0.063095734448019303, C= 15.848931924611142, degree = 3, verbose=True)
+    else:
+        classifier = svm.SVC(gamma=0.25118864315095796,C=3.9810717055349691, degree = 3, verbose=True)
+    classifier.fit(Xtrain,Ytrain)
+    #grid.fit(Xtrain,Ytrain)
+    #print 'The best classifier is: %s' %grid.best_estimator_
+
+    #return grid.best_estimator_
+    return classifier
 
 def regress(fn, name, X, Y, Xval, Xtestsub):
     Xtrain, Xtest, Ytrain, Ytest = skcv.train_test_split(X, Y, train_size=0.8)
 
-    class1 = fn(Xtrain, Ytrain[:, 0])
-    class2 = fn(Xtrain, Ytrain[:, 1])
+    class1 = fn(Xtrain, Ytrain[:, 0],0)
+    class2 = fn(Xtrain, Ytrain[:, 1],1)
+    print 'DEBUG: classifier trained'
 
     print 'SCORE:', name, ' - trainset ', sumscore_classifier(class1, class2, Xtrain, Ytrain)
     print 'SCORE:', name, ' - test ', sumscore_classifier(class1, class2, Xtest, Ytest)
 
     predict_and_print('validate_y_' + name, class1, class2, Xval)
-    predict_and_print('test_y_' + name, class1, class2, Xtestsub)
+    #predict_and_print('test_y_' + name, class1, class2, Xtestsub)
 
 
 def regress_no_split(fn, name, X, Y, Xval, Xtestsub):
-    class1 = fn(X, Y[:, 0])
-    class2 = fn(X, Y[:, 1])
+    class1 = fn(X, Y[:, 0],0)
+    class2 = fn(X, Y[:, 1],1)
 
     print 'SCORE:', name, ' - all ', sumscore_classifier(class1, class2, X, Y)
 
@@ -130,25 +153,32 @@ def regress_no_split(fn, name, X, Y, Xval, Xtestsub):
     print 'SCORE:', name, ' - (cv) mean on 2 : ', np.mean(scores), ' +/- ', np.std(scores)
 
     predict_and_print('validate_y_' + name, class1, class2, Xval)
-    predict_and_print('test_y_' + name, class1, class2, Xtestsub)
+    #predict_and_print('test_y_' + name, class1, class2, Xtestsub)
 
 
 def read_and_regress(feature_fn):
     Xo = read_path('project_data/train.csv')
     print 'data points: ', len(Xo)
-
     Y = np.genfromtxt('project_data/train_y.csv', delimiter=',')
     X = read_features(Xo, feature_fn)
+    X = preprocessing.scale(X)
     print 'DEBUG: total nb of base-functions: %d' % np.shape(X)[1]
     Xvalo = read_path('project_data/validate.csv')
     Xtesto = read_path('project_data/test.csv')
     Xval = read_features(Xvalo, feature_fn)
     Xtest = read_features(Xtesto, feature_fn)
+    Xval = preprocessing.scale(Xval)
+    Xtest = preprocessing.scale(Xtest)
     print 'DEBUG: read in everything'
 
-    regress(lin_classifier, 'lin', X, Y, Xval, Xtest)
-    regress(knn_classifier, 'knn', X, Y, Xval, Xtest)
-    regress_no_split(tree_classifier, 'tree', X, Y, Xval, Xtest)
+    #regress(lin_classifier, 'lin', X, Y, Xval, Xtest)
+    #regress(knn_classifier, 'knn', X, Y, Xval, Xtest)
+    #regress_no_split(tree_classifier, 'tree', X, Y, Xval, Xtest)
+
+    #regress(svm_classifier,'svm',X,Y,Xval,Xtest)
+    Yval = np.genfromtxt('project_data/validate_y_svm.txt', delimiter=',')
+    print 'training classifier on predicted data'
+    regress_no_split(svm_classifier,'svm_trained',Xval,Yval,Xval,Xtest)
 
 
 if __name__ == "__main__":
