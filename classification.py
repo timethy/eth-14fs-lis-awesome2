@@ -36,16 +36,16 @@ def read_path(inpath):
     with open(inpath, 'r') as fin:
         reader = csv.reader(fin, delimiter=',')
         for row in reader:
-            X.append(row)
+            X.append(map(float, row))
     return X
 
 
-def read_features(X, features_fn):
+def read_features(X, means, features_fn):
     M = []
     x_rows = len(X)
     i = 1
     for x in X:
-        m = features_fn(x)
+        m = features_fn(x, means)
         M.append(m)
         if i % 100000 == 0:
             print str(i) + ' of ' + str(x_rows) + ' rows processed...'
@@ -54,20 +54,24 @@ def read_features(X, features_fn):
     return np.matrix(M)
 
 
+def some_features(x):
+    return [np.log(1 + np.abs(x)), np.exp(x), x, x ** 2, np.abs(x)]
+
+
 # Assume that all values in x are ready-to-use features (i. e. no timestamps)
-def simple_implementation(x):
-    x = map(float, x)
-    x.append(x[0]*x[1])
-    x.append(x[5]*x[6])
-#    x[3] = np.abs(x[3])
-    return x
+def simple_implementation(x, means):
+#    x = map(float, x)
+    fs = [y for i in range(8) for y in some_features(x[i]/means[i])]
+    fs.extend(x[9:])
+    fs.append(1)
+    return fs
 
 
-def ortho(fns, x):
+def ortho(fns, x, means):
     y = []
     for fn in fns:
-        y.extend(fn(x))
-    return np.array(y)
+        y.extend(fn(x, means))
+    return y
 
 
 def predict_and_print(name, class1, class2, X):
@@ -75,14 +79,15 @@ def predict_and_print(name, class1, class2, X):
     np.savetxt('project_data/' + name + '.txt', Ypred.T, fmt='%i', delimiter=',')
 
 
-def lin_classifier(Xtrain, Ytrain, opt=0):
+def lin_classifier(Xtrain, Ytrain):
     classifier = LinearSVC()
     classifier.fit(Xtrain, Ytrain)
+    print 'LIN: coef', classifier.coef_
     return classifier
 
 
-def tree_classifier(Xtrain, Ytrain, opt=0):
-    param_grid = {'n_estimators': range(5, 51, 5), 'max_depth': range(10, 101, 10)}
+def tree_classifier(Xtrain, Ytrain):
+    param_grid = {'n_estimators': range(1, 52, 25), 'max_depth': range(1, 10, 1), 'max_features': range(20, 81, 10)}
     classifier = RandomForestClassifier(n_jobs=4)
     classifier.fit(Xtrain, Ytrain)
     print 'TREE: classifier: ', classifier
@@ -95,8 +100,10 @@ def tree_classifier(Xtrain, Ytrain, opt=0):
     return grid_search.best_estimator_
 
 
-def knn_classifier(Xtrain, Ytrain, opt=0):
-    param_grid = {'n_neighbors': [4, 8, 16], 'weights': ['uniform']}
+def knn_classifier(Xtrain, Ytrain):
+    param_grid = {'n_neighbors': [4, 8, 16], 'weights': ['uniform'],
+#                  'metric': map(DistanceMetric.get_metric, ['manhatten', 'jaccard'])
+    }
     classifier = KNeighborsClassifier(algorithm='auto')
     classifier.fit(Xtrain, Ytrain)
     print 'KNN: classifier: ', classifier
@@ -108,7 +115,7 @@ def knn_classifier(Xtrain, Ytrain, opt=0):
     print 'KNN: best_estimator_.score: ', score(Ytrain, grid_search.predict(Xtrain))
     return grid_search.best_estimator_
 
-def svm_classifier(Xtrain,Ytrain,opt=0):
+def svm_classifier_opt(Xtrain, Ytrain, opt):
     #param_grid = {'weights': ['uniform']}      #standard assumption by svm
     #C_range = np.logspace(-3,3,11)
     #gamma_range = np.logspace(-3,3,11)
@@ -126,11 +133,16 @@ def svm_classifier(Xtrain,Ytrain,opt=0):
     #return grid.best_estimator_
     return classifier
 
+
+def svm_classifier(opt):
+    return lambda Xtrain, Ytrain: svm_classifier_opt(Xtrain, Ytrain, opt)
+
+
 def regress(fn, name, X, Y, Xval, Xtestsub):
     Xtrain, Xtest, Ytrain, Ytest = skcv.train_test_split(X, Y, train_size=0.8)
 
-    class1 = fn(Xtrain, Ytrain[:, 0],0)
-    class2 = fn(Xtrain, Ytrain[:, 1],1)
+    class1 = fn(Xtrain, Ytrain[:, 0])
+    class2 = fn(Xtrain, Ytrain[:, 1])
     print 'DEBUG: classifier trained'
 
     print 'SCORE:', name, ' - trainset ', sumscore_classifier(class1, class2, Xtrain, Ytrain)
@@ -159,27 +171,34 @@ def regress_no_split(fn, name, X, Y, Xval, Xtestsub):
 def read_and_regress(feature_fn):
     Xo = read_path('project_data/train.csv')
     print 'data points: ', len(Xo)
+
+    XM = np.matrix(Xo)
+    means = [np.mean(XM[:,i]) for i in range(np.shape(XM)[1])]
+    print 'means: ', means
+
     Y = np.genfromtxt('project_data/train_y.csv', delimiter=',')
-    X = read_features(Xo, feature_fn)
+    X = read_features(Xo, means, feature_fn)
     X = preprocessing.scale(X)
     print 'DEBUG: total nb of base-functions: %d' % np.shape(X)[1]
     Xvalo = read_path('project_data/validate.csv')
-    Xtesto = read_path('project_data/test.csv')
-    Xval = read_features(Xvalo, feature_fn)
-    Xtest = read_features(Xtesto, feature_fn)
+#   Xtesto = read_path('project_data/test.csv')
+    Xval = read_features(Xvalo, means, feature_fn)
+#   Xtest = read_features(Xtesto, means, feature_fn)
     Xval = preprocessing.scale(Xval)
-    Xtest = preprocessing.scale(Xtest)
+#   Xtest = preprocessing.scale(Xtest)
+    # For now, we don't need to generate test
+    Xtest = Xval
     print 'DEBUG: read in everything'
 
     #regress(lin_classifier, 'lin', X, Y, Xval, Xtest)
-    #regress(knn_classifier, 'knn', X, Y, Xval, Xtest)
-    #regress_no_split(tree_classifier, 'tree', X, Y, Xval, Xtest)
+    regress(knn_classifier, 'knn', X, Y, Xval, Xtest)
+    regress_no_split(tree_classifier, 'tree', X, Y, Xval, Xtest)
 
-    #regress(svm_classifier,'svm',X,Y,Xval,Xtest)
-    Yval = np.genfromtxt('project_data/validate_y_svm.txt', delimiter=',')
-    print 'training classifier on predicted data'
-    regress_no_split(svm_classifier,'svm_trained',Xval,Yval,Xval,Xtest)
+    #regress(svm_classifier(0),'svm',X,Y,Xval,Xtest)
+    #Yval = np.genfromtxt('project_data/validate_y_svm.txt', delimiter=',')
+    #print 'training classifier on predicted data'
+    #regress_no_split(svm_classifier,'svm_trained',Xval,Yval,Xval,Xtest)
 
 
 if __name__ == "__main__":
-    read_and_regress(lambda x: ortho([simple_implementation], x))
+    read_and_regress(lambda x, means: ortho([simple_implementation], x, means))
