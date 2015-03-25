@@ -1,4 +1,4 @@
-import numpy as np                  #basic linear algebra
+import numpy as np
 import csv
 import sklearn.linear_model as sklin
 import sklearn.ensemble as rf
@@ -8,7 +8,7 @@ import sklearn.grid_search as skgs
 from sklearn import linear_model
 from sklearn.svm import LinearSVC
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 
 from sklearn import svm
 from sklearn.grid_search import GridSearchCV
@@ -55,7 +55,8 @@ def read_features(X, means, features_fn):
 
 
 def some_features(x):
-    return [np.log(1 + np.abs(x)), np.exp(x), x, x ** 2, np.abs(x)]
+    return [x]
+#    return [np.log(1 + np.abs(x)), np.exp(x), x, x ** 2, np.abs(x)]
 
 
 # Assume that all values in x are ready-to-use features (i. e. no timestamps)
@@ -87,8 +88,8 @@ def lin_classifier(Xtrain, Ytrain):
 
 
 def tree_classifier(Xtrain, Ytrain):
-    param_grid = {'n_estimators': range(1, 52, 25), 'max_depth': range(1, 10, 1), 'max_features': range(20, 81, 10)}
-    classifier = RandomForestClassifier(n_jobs=4)
+    param_grid = {'n_estimators': range(1, 52, 25)}
+    classifier = ExtraTreesClassifier(n_jobs=4, max_features=None)
     classifier.fit(Xtrain, Ytrain)
     print 'TREE: classifier: ', classifier
     print 'TREE: classifier.score: ', score(Ytrain, classifier.predict(Xtrain))
@@ -98,10 +99,25 @@ def tree_classifier(Xtrain, Ytrain):
     print 'TREE: best_estimator_: ', grid_search.best_estimator_
     print 'TREE: best_estimator_.score: ', score(Ytrain, grid_search.predict(Xtrain))
     return grid_search.best_estimator_
+    return classifier
+
+
+def forest_classifier(Xtrain, Ytrain):
+    param_grid = {'n_estimators': range(1, 52, 25), 'max_depth': range(1, 10, 1)}
+    classifier = RandomForestClassifier(n_jobs=4, max_features=None)
+    classifier.fit(Xtrain, Ytrain)
+    print 'FOREST: classifier: ', classifier
+    print 'FOREST: classifier.score: ', score(Ytrain, classifier.predict(Xtrain))
+    scorefun = skmet.make_scorer(lambda x, y: -score(x, y))
+    grid_search = skgs.GridSearchCV(classifier, param_grid, scoring=scorefun, cv=5)
+    grid_search.fit(Xtrain, Ytrain)
+    print 'FOREST: best_estimator_: ', grid_search.best_estimator_
+    print 'FOREST: best_estimator_.score: ', score(Ytrain, grid_search.predict(Xtrain))
+    return grid_search.best_estimator_
 
 
 def knn_classifier(Xtrain, Ytrain):
-    param_grid = {'n_neighbors': [4, 8, 16], 'weights': ['uniform'],
+    param_grid = {'n_neighbors': [4, 5, 8, 16], 'weights': ['uniform'],
 #                  'metric': map(DistanceMetric.get_metric, ['manhatten', 'jaccard'])
     }
     classifier = KNeighborsClassifier(algorithm='auto')
@@ -114,6 +130,7 @@ def knn_classifier(Xtrain, Ytrain):
     print 'KNN: best_estimator_: ', grid_search.best_estimator_
     print 'KNN: best_estimator_.score: ', score(Ytrain, grid_search.predict(Xtrain))
     return grid_search.best_estimator_
+
 
 def svm_classifier_opt(Xtrain, Ytrain, opt):
     #param_grid = {'weights': ['uniform']}      #standard assumption by svm
@@ -132,6 +149,10 @@ def svm_classifier_opt(Xtrain, Ytrain, opt):
 
     #return grid.best_estimator_
     return classifier
+
+
+def multi_classifier(classifiers):
+    return {}
 
 
 def svm_classifier(opt):
@@ -153,8 +174,8 @@ def regress(fn, name, X, Y, Xval, Xtestsub):
 
 
 def regress_no_split(fn, name, X, Y, Xval, Xtestsub):
-    class1 = fn(X, Y[:, 0],0)
-    class2 = fn(X, Y[:, 1],1)
+    class1 = fn(X, Y[:, 0], 0)
+    class2 = fn(X, Y[:, 1], 1)
 
     print 'SCORE:', name, ' - all ', sumscore_classifier(class1, class2, X, Y)
 
@@ -192,7 +213,8 @@ def read_and_regress(feature_fn):
 
     #regress(lin_classifier, 'lin', X, Y, Xval, Xtest)
     regress(knn_classifier, 'knn', X, Y, Xval, Xtest)
-    regress_no_split(tree_classifier, 'tree', X, Y, Xval, Xtest)
+    regress(tree_classifier, 'tree', X, Y, Xval, Xtest)
+#    regress_no_split(forest_classifier, 'forest', X, Y, Xval, Xtest)
 
     #regress(svm_classifier(0),'svm',X,Y,Xval,Xtest)
     #Yval = np.genfromtxt('project_data/validate_y_svm.txt', delimiter=',')
