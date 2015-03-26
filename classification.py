@@ -21,6 +21,7 @@ from sklearn.multiclass import OneVsOneClassifier
 def score(gtruth, gpred):
     # Minimizing this should result in minimizing sumscore in the end.
     # We do not actually need the len(gtruth), but it enhances debugging, since it then corresponds to the sumscore.
+
     return float(np.sum(gtruth != gpred))/(len(gtruth))
 
 
@@ -46,8 +47,8 @@ def read_features(X, means,stds, features_fn):
     x_rows = len(X)
     i = 1
     for x in X:
-        m = features_fn(x, means, stds)
-        M.append(m)
+        #m = features_fn(x, means, stds)
+        M.append(x)
         if i % 100000 == 0:
             print str(i) + ' of ' + str(x_rows) + ' rows processed...'
         i += 1
@@ -93,11 +94,11 @@ def onevsone_classifier(Xtrain,Ytrain):
     return classifier
 
 def tree_classifier(Xtrain, Ytrain):
-    param_grid = {'n_estimators': range(20, 30,3),
-                  'max_features': range(20,40,7),
-                  'min_samples_split': range(3,4,1),
-                  'max_depth': range(10,50,20)}
-    classifier = ExtraTreesClassifier(n_jobs=-1,verbose=0, min_samples_leaf=3)
+    '''param_grid = {
+                  'max_features': range(20,53,15),}
+        #'min_samples_split': range(2,4,1),
+        #'max_depth': range(10,50,20)
+    classifier = ExtraTreesClassifier(n_jobs=-1,verbose=0, min_samples_leaf=3, n_estimators = 220, criterion = 'entropy')
 
     classifier.fit(Xtrain, Ytrain)
     print 'TREE: classifier: ', classifier
@@ -109,15 +110,16 @@ def tree_classifier(Xtrain, Ytrain):
     print 'TREE: best_estimator_.score: ', score(Ytrain, grid_search.predict(Xtrain))
     return grid_search.best_estimator_
 
-    '''#evaluated classifier
+    '''
+
+    #evaluated classifier
     classifier = ExtraTreesClassifier(n_jobs=-1,
-                                      min_samples_leaf=3,
-                                      max_depth=30,
-                                      max_features=53,
-                                      min_samples_split=2,
-                                      n_estimators=29)
+                                      criterion='entropy',
+                                      max_features=40,
+                                      min_samples_split=4,
+                                      n_estimators=320)
     classifier.fit(Xtrain,Ytrain)
-    return classifier'''
+    return classifier
 
 
 def forest_classifier(Xtrain, Ytrain):
@@ -178,7 +180,7 @@ def multi_classifier(classifiers):
 
 
 def regress(fn, name, X, Y, Xval, Xtestsub):
-    Xtrain, Xtest, Ytrain, Ytest = skcv.train_test_split(X, Y, train_size=0.8)
+    Xtrain, Xtest, Ytrain, Ytest = skcv.train_test_split(X, Y, train_size=0.7)
 
     class1 = fn(Xtrain, Ytrain[:, 0])
     class2 = fn(Xtrain, Ytrain[:, 1])
@@ -188,7 +190,7 @@ def regress(fn, name, X, Y, Xval, Xtestsub):
     print 'SCORE:', name, ' - test ', sumscore_classifier(class1, class2, Xtest, Ytest)
 
     predict_and_print('validate_y_' + name, class1, class2, Xval)
-    #predict_and_print('test_y_' + name, class1, class2, Xtestsub)
+    predict_and_print('test_y_' + name, class1, class2, Xtestsub)
 
 
 def regress_no_split(fn, name, X, Y, Xval, Xtestsub):
@@ -197,14 +199,14 @@ def regress_no_split(fn, name, X, Y, Xval, Xtestsub):
 
     print 'SCORE:', name, ' - all ', sumscore_classifier(class1, class2, X, Y)
 
-    score_fn = skmet.make_scorer(score)
-    scores = skcv.cross_val_score(class1, X, Y[:, 0], scoring=score_fn, cv=5)
+    ''' score_fn = skmet.make_scorer(score)
+    scores = skcv.cross_val_score(class1, X, Y[:, 0], scoring=score_fn, cv=3)
     print 'SCORE:', name, ' - (cv) mean on 1 : ', np.mean(scores), ' +/- ', np.std(scores)
-    scores = skcv.cross_val_score(class2, X, Y[:, 1], scoring=score_fn, cv=5)
+    scores = skcv.cross_val_score(class2, X, Y[:, 1], scoring=score_fn, cv=3)
     print 'SCORE:', name, ' - (cv) mean on 2 : ', np.mean(scores), ' +/- ', np.std(scores)
-
+    '''
     predict_and_print('validate_y_' + name, class1, class2, Xval)
-    #predict_and_print('test_y_' + name, class1, class2, Xtestsub)
+    predict_and_print('test_y_' + name, class1, class2, Xtestsub)
 
 
 def read_and_regress(feature_fn):
@@ -227,25 +229,25 @@ def read_and_regress(feature_fn):
 
     print 'DEBUG: total nb of base-functions: %d' % np.shape(X)[1]
     Xvalo = read_path('project_data/validate.csv')
-#   Xtesto = read_path('project_data/test.csv')
+    Xtesto = read_path('project_data/test.csv')
     Xval = read_features(Xvalo, means, stds, feature_fn)
-#   Xtest = read_features(Xtesto, means, feature_fn)
+    Xtest = read_features(Xtesto, means, stds, feature_fn)
     #Xval[:,0:9] = preprocessing.scale(Xval[:,0:9])      #only scale features that are not 'one-hot-encoded'
 #   Xtest = preprocessing.scale(Xtest)
     # For now, we don't need to generate test
-    Xtest = Xval
+    #Xtest = Xval
     print 'DEBUG: read in everything'
 
     #regress(lin_classifier, 'lin', X, Y, Xval, Xtest)
     #regress(knn_classifier, 'knn', X, Y, Xval, Xtest)
-    regress(tree_classifier, 'tree', X, Y, Xval, Xtest)
+    regress_no_split(tree_classifier, 'tree', X, Y, Xval, Xtest)
     #regress(onevsone_classifier, 'onevsone', X, Y, Xval, Xtest)
     #regress_no_split(forest_classifier, 'forest', X, Y, Xval, Xtest)
     #regress_no_split(svm_classifier, 'svm', X, Y, Xval, Xtest)
     #regress(svm_classifier(0),'svm',X,Y,Xval,Xtest)
-    #Yval = np.genfromtxt('project_data/validate_y_svm.txt', delimiter=',')
-    #print 'training classifier on predicted data'
-    #regress_no_split(svm_classifier,'svm_trained',Xval,Yval,Xval,Xtest)
+    '''Yval = np.genfromtxt('project_data/validate_y_tree.txt', delimiter=',')
+    print 'training classifier on predicted data'
+    regress(tree_classifier,'tree',Xval,Yval,Xval,Xtest)'''
 
 
 if __name__ == "__main__":
