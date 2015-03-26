@@ -15,6 +15,7 @@ from sklearn.grid_search import GridSearchCV
 from sklearn.cross_validation import StratifiedKFold
 from sklearn import preprocessing
 from sklearn.neighbors.dist_metrics import DistanceMetric
+from sklearn.multiclass import OneVsOneClassifier
 
 
 def score(gtruth, gpred):
@@ -40,12 +41,12 @@ def read_path(inpath):
     return X
 
 
-def read_features(X, means, features_fn):
+def read_features(X, means,stds, features_fn):
     M = []
     x_rows = len(X)
     i = 1
     for x in X:
-        m = features_fn(x, means)
+        m = features_fn(x, means, stds)
         M.append(m)
         if i % 100000 == 0:
             print str(i) + ' of ' + str(x_rows) + ' rows processed...'
@@ -60,18 +61,18 @@ def some_features(x):
 
 
 # Assume that all values in x are ready-to-use features (i. e. no timestamps)
-def simple_implementation(x, means):
+def simple_implementation(x, means,stds):
 #    x = map(float, x)
-    fs = [y for i in range(8) for y in some_features(x[i]/means[i])]
+    fs = [y for i in range(8) for y in some_features((float(x[i])-means[i])/stds[i])]
     fs.extend(x[9:])
     fs.append(1)
     return fs
 
 
-def ortho(fns, x, means):
+def ortho(fns, x, means,stds):
     y = []
     for fn in fns:
-        y.extend(fn(x, means))
+        y.extend(fn(x, means,stds))
     return y
 
 
@@ -86,10 +87,18 @@ def lin_classifier(Xtrain, Ytrain):
     print 'LIN: coef', classifier.coef_
     return classifier
 
+def onevsone_classifier(Xtrain,Ytrain):
+    classifier = OneVsOneClassifier(LinearSVC(random_state=0))
+    classifier.fit(Xtrain,Ytrain)
+    return classifier
 
 def tree_classifier(Xtrain, Ytrain):
-    param_grid = {'n_estimators': range(1, 52, 25)}
-    classifier = ExtraTreesClassifier(n_jobs=4, max_features=None)
+    param_grid = {'n_estimators': range(20, 30,3),
+                  'max_features': range(20,40,7),
+                  'min_samples_split': range(3,4,1),
+                  'max_depth': range(10,50,20)}
+    classifier = ExtraTreesClassifier(n_jobs=-1,verbose=0, min_samples_leaf=3)
+
     classifier.fit(Xtrain, Ytrain)
     print 'TREE: classifier: ', classifier
     print 'TREE: classifier.score: ', score(Ytrain, classifier.predict(Xtrain))
@@ -99,17 +108,26 @@ def tree_classifier(Xtrain, Ytrain):
     print 'TREE: best_estimator_: ', grid_search.best_estimator_
     print 'TREE: best_estimator_.score: ', score(Ytrain, grid_search.predict(Xtrain))
     return grid_search.best_estimator_
-    return classifier
+
+    '''#evaluated classifier
+    classifier = ExtraTreesClassifier(n_jobs=-1,
+                                      min_samples_leaf=3,
+                                      max_depth=30,
+                                      max_features=53,
+                                      min_samples_split=2,
+                                      n_estimators=29)
+    classifier.fit(Xtrain,Ytrain)
+    return classifier'''
 
 
 def forest_classifier(Xtrain, Ytrain):
-    param_grid = {'n_estimators': range(1, 52, 25), 'max_depth': range(1, 10, 1)}
-    classifier = RandomForestClassifier(n_jobs=4, max_features=None)
+    param_grid = {'n_estimators': range(1, 100, 25), 'max_features': range(1, 50, 5), 'min_samples_split': range(1,10,1), 'max_depth': range(1,1000,100)}
+    classifier = RandomForestClassifier(n_jobs=-1,verbose=1, max_depth=None,min_samples_split=1)
     classifier.fit(Xtrain, Ytrain)
     print 'FOREST: classifier: ', classifier
     print 'FOREST: classifier.score: ', score(Ytrain, classifier.predict(Xtrain))
     scorefun = skmet.make_scorer(lambda x, y: -score(x, y))
-    grid_search = skgs.GridSearchCV(classifier, param_grid, scoring=scorefun, cv=5)
+    grid_search = skgs.GridSearchCV(classifier, param_grid, scoring=scorefun, cv=3)
     grid_search.fit(Xtrain, Ytrain)
     print 'FOREST: best_estimator_: ', grid_search.best_estimator_
     print 'FOREST: best_estimator_.score: ', score(Ytrain, grid_search.predict(Xtrain))
@@ -132,31 +150,31 @@ def knn_classifier(Xtrain, Ytrain):
     return grid_search.best_estimator_
 
 
-def svm_classifier_opt(Xtrain, Ytrain, opt):
+def svm_classifier(Xtrain, Ytrain):
     #param_grid = {'weights': ['uniform']}      #standard assumption by svm
-    #C_range = np.logspace(-3,3,11)
-    #gamma_range = np.logspace(-3,3,11)
-    #cv = StratifiedKFold(y=Ytrain, n_folds=3)
-    #param_grid = dict(gamma = gamma_range, C = C_range)
-    #grid = GridSearchCV(svm.SVC(verbose=True), param_grid = param_grid, cv=cv, verbose=5, n_jobs=4)
-    if opt == 0:
-        classifier = svm.SVC(gamma = 0.063095734448019303, C= 15.848931924611142, degree = 3, verbose=True)
-    else:
-        classifier = svm.SVC(gamma=0.25118864315095796,C=3.9810717055349691, degree = 3, verbose=True)
-    classifier.fit(Xtrain,Ytrain)
-    #grid.fit(Xtrain,Ytrain)
-    #print 'The best classifier is: %s' %grid.best_estimator_
+    C_range = np.logspace(-3,3,11)
+    gamma_range = np.logspace(-3,3,11)
+    degree_range = range(2,4,1)
+    coef0_range = np.logspace(-3,3,11)
+    cv = StratifiedKFold(y=Ytrain, n_folds=3)
+    param_grid = dict(gamma = gamma_range, C = C_range, degree = degree_range, coef0 = coef0_range)
+    grid = GridSearchCV(svm.SVC(verbose=True, kernel = 'poly'), param_grid = param_grid, cv=cv, verbose=5, n_jobs=-1)
+    #if opt == 0:
+    #    classifier = svm.SVC(gamma = 0.063095734448019303, C= 15.848931924611142, degree = 3, verbose=True)
+    #else:
+    #    classifier = svm.SVC(gamma=0.25118864315095796,C=3.9810717055349691, degree = 3, verbose=True)
+    #classifier.fit(Xtrain,Ytrain)
+    grid.fit(Xtrain,Ytrain)
+    print 'The best classifier is: %s' %grid.best_estimator_
 
-    #return grid.best_estimator_
-    return classifier
+    return grid.best_estimator_
+    #return classifier
 
 
 def multi_classifier(classifiers):
     return {}
 
 
-def svm_classifier(opt):
-    return lambda Xtrain, Ytrain: svm_classifier_opt(Xtrain, Ytrain, opt)
 
 
 def regress(fn, name, X, Y, Xval, Xtestsub):
@@ -174,8 +192,8 @@ def regress(fn, name, X, Y, Xval, Xtestsub):
 
 
 def regress_no_split(fn, name, X, Y, Xval, Xtestsub):
-    class1 = fn(X, Y[:, 0], 0)
-    class2 = fn(X, Y[:, 1], 1)
+    class1 = fn(X, Y[:, 0])
+    class2 = fn(X, Y[:, 1])
 
     print 'SCORE:', name, ' - all ', sumscore_classifier(class1, class2, X, Y)
 
@@ -196,26 +214,34 @@ def read_and_regress(feature_fn):
     XM = np.matrix(Xo)
     means = [np.mean(XM[:,i]) for i in range(np.shape(XM)[1])]
     print 'means: ', means
+    stds = [np.std(XM[:,i]) for i in range(np.shape(XM)[1])]
+    print 'stds: ', stds
 
     Y = np.genfromtxt('project_data/train_y.csv', delimiter=',')
-    X = read_features(Xo, means, feature_fn)
-    X = preprocessing.scale(X)
+    np.savetxt('project_data/' + 'DEBUG_X' + '.txt', Xo, fmt='%f', delimiter=',')
+
+    X = read_features(Xo, means, stds, feature_fn)
+
+    #X[:,0:9] = preprocessing.scale(X[:,0:9])
+    np.savetxt('project_data/' + 'DEBUG_Xscaled' + '.txt', X, fmt='%1.2f', delimiter=',')
+
     print 'DEBUG: total nb of base-functions: %d' % np.shape(X)[1]
     Xvalo = read_path('project_data/validate.csv')
 #   Xtesto = read_path('project_data/test.csv')
-    Xval = read_features(Xvalo, means, feature_fn)
+    Xval = read_features(Xvalo, means, stds, feature_fn)
 #   Xtest = read_features(Xtesto, means, feature_fn)
-    Xval = preprocessing.scale(Xval)
+    #Xval[:,0:9] = preprocessing.scale(Xval[:,0:9])      #only scale features that are not 'one-hot-encoded'
 #   Xtest = preprocessing.scale(Xtest)
     # For now, we don't need to generate test
     Xtest = Xval
     print 'DEBUG: read in everything'
 
     #regress(lin_classifier, 'lin', X, Y, Xval, Xtest)
-    regress(knn_classifier, 'knn', X, Y, Xval, Xtest)
+    #regress(knn_classifier, 'knn', X, Y, Xval, Xtest)
     regress(tree_classifier, 'tree', X, Y, Xval, Xtest)
-#    regress_no_split(forest_classifier, 'forest', X, Y, Xval, Xtest)
-
+    #regress(onevsone_classifier, 'onevsone', X, Y, Xval, Xtest)
+    #regress_no_split(forest_classifier, 'forest', X, Y, Xval, Xtest)
+    #regress_no_split(svm_classifier, 'svm', X, Y, Xval, Xtest)
     #regress(svm_classifier(0),'svm',X,Y,Xval,Xtest)
     #Yval = np.genfromtxt('project_data/validate_y_svm.txt', delimiter=',')
     #print 'training classifier on predicted data'
@@ -223,4 +249,4 @@ def read_and_regress(feature_fn):
 
 
 if __name__ == "__main__":
-    read_and_regress(lambda x, means: ortho([simple_implementation], x, means))
+    read_and_regress(lambda x, means, stds: ortho([simple_implementation], x, means, stds))
