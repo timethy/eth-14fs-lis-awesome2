@@ -53,7 +53,12 @@ def read_features(X, means,stds, features_fn):
             print str(i) + ' of ' + str(x_rows) + ' rows processed...'
         i += 1
     print str(i) + ' of ' + str(x_rows) + ' rows processed...'
-    return np.matrix(M)
+    poly = preprocessing.PolynomialFeatures(3)
+    M = np.matrix(M)
+    Xs = M[:,0:9]
+    Xs = poly.fit_transform(Xs)
+    M = np.concatenate((M,Xs),axis=1)
+    return M
 
 
 def some_features(x):
@@ -115,9 +120,9 @@ def tree_classifier(Xtrain, Ytrain):
     #evaluated classifier
     classifier = ExtraTreesClassifier(n_jobs=-1,
                                       criterion='entropy',
-                                      max_features=40,
+                                      max_features=108,
                                       min_samples_split=4,
-                                      n_estimators=320)
+                                      n_estimators=421)
     classifier.fit(Xtrain,Ytrain)
     return classifier
 
@@ -193,12 +198,12 @@ def regress(fn, name, X, Y, Xval, Xtestsub):
     predict_and_print('test_y_' + name, class1, class2, Xtestsub)
 
 
+
 def regress_no_split(fn, name, X, Y, Xval, Xtestsub):
     class1 = fn(X, Y[:, 0])
     class2 = fn(X, Y[:, 1])
 
     print 'SCORE:', name, ' - all ', sumscore_classifier(class1, class2, X, Y)
-
     ''' score_fn = skmet.make_scorer(score)
     scores = skcv.cross_val_score(class1, X, Y[:, 0], scoring=score_fn, cv=3)
     print 'SCORE:', name, ' - (cv) mean on 1 : ', np.mean(scores), ' +/- ', np.std(scores)
@@ -215,17 +220,17 @@ def read_and_regress(feature_fn):
 
     XM = np.matrix(Xo)
     means = [np.mean(XM[:,i]) for i in range(np.shape(XM)[1])]
-    print 'means: ', means
+    #print 'means: ', means
     stds = [np.std(XM[:,i]) for i in range(np.shape(XM)[1])]
-    print 'stds: ', stds
+    #print 'stds: ', stds
 
     Y = np.genfromtxt('project_data/train_y.csv', delimiter=',')
-    np.savetxt('project_data/' + 'DEBUG_X' + '.txt', Xo, fmt='%f', delimiter=',')
+    #np.savetxt('project_data/' + 'DEBUG_X' + '.txt', Xo, fmt='%f', delimiter=',')
 
     X = read_features(Xo, means, stds, feature_fn)
 
     #X[:,0:9] = preprocessing.scale(X[:,0:9])
-    np.savetxt('project_data/' + 'DEBUG_Xscaled' + '.txt', X, fmt='%1.2f', delimiter=',')
+    #np.savetxt('project_data/' + 'DEBUG_Xscaled' + '.txt', X, fmt='%1.2f', delimiter=',')
 
     print 'DEBUG: total nb of base-functions: %d' % np.shape(X)[1]
     Xvalo = read_path('project_data/validate.csv')
