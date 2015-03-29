@@ -34,16 +34,20 @@
 We used a number of different classifiers, like k-nn, svm, randomforest and extratree.
 
 In the end, we achieved the best results with the extratree-classifier, using the features as they are provided, without even scaling them.
-We used a grid-search to find the best parameters for max_features', 'min_samples_split' and 'max_depth'.
+We used a grid-search to find the best parameters for ``max\_features'', ``min\_samples\_split'' and ``max\_depth''.
 
 The following parameters for the ExtraTree Classifier turned out to perform best:
-criterion='entropy'
-max_features=108
-min_samples_split=4
-n_estimators=421
+criterion=``entropy''
+max\_features=108
+min\_samples\_split=4
+n\_estimators=421
 
-We found out, that the max_features and the n_estimators need to be high where as max_depth should be rather low, to avoid overfitting of the classifier.
+
+We found out, that the max\_features and the n\_estimators need to be high where as max\_depth should be rather low, to avoid overfitting of the classifier.
 
 
 \subsection{Features}
-We used all the provided features without changing them and added for the first 9 features also their polynomials up to degree 3. This lead to a much higher amout of features (273 instead of 53) and to a much longer evaluation time but unfortunately not a big improvement of the predictions.
+We used all the provided features without changing them and added for the first 9 features also their polynomials up to degree 3.
+This lead to a much higher amout of features (273 instead of 53) and to a much longer evaluation time but unfortunately not a big improvement of the predictions.
+
+\end{document}
