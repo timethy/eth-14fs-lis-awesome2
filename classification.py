@@ -17,6 +17,8 @@ from sklearn import preprocessing
 from sklearn.neighbors.dist_metrics import DistanceMetric
 from sklearn.multiclass import OneVsOneClassifier
 
+import libfann
+
 
 def score(gtruth, gpred):
     # Minimizing this should result in minimizing sumscore in the end.
@@ -31,6 +33,21 @@ def sumscore(gtruth1, gtruth2, gpred1, gpred2):
 
 def sumscore_classifier(class1, class2, X, Y):
     return sumscore(Y[:, 0], Y[:, 1], class1.predict(X), class2.predict(X))
+
+def sumscore_classifier_ann(class1, class2, X, Y):
+    #approxFun1 =  (np.vectorize(class1))
+    #approxFun2 =  (np.vectorize(class2))
+    ann2 = libfann.neural_net()
+    ann2.create_from_file("project_data/ann"+str(max(Y[:,0]))+".net")
+    ann7 = libfann.neural_net()
+    ann7.create_from_file("project_data/ann"+str(max(Y[:,1]))+".net")
+    nr_features = max(X.shape)
+    mat1 = np.array([])
+    mat2 = np.array([])
+    for i in range(nr_features):
+        mat1 = np.append(mat1, int(np.round(ann2.run(X[i,:]))))
+        mat2 = np.append(mat2,int(np.round(ann7.run(X[i,:]))))
+    return sumscore(Y[:, 0], Y[:, 1], mat1, mat2)
 
 
 def read_path(inpath):
@@ -48,7 +65,7 @@ def read_features(X, means,stds, features_fn):
     i = 1
     for x in X:
         #m = features_fn(x, means, stds)
-        M.append(x)
+        M.append(map(float,x))
         if i % 100000 == 0:
             print str(i) + ' of ' + str(x_rows) + ' rows processed...'
         i += 1
@@ -81,6 +98,21 @@ def predict_and_print(name, class1, class2, X):
     Ypred = np.array([class1.predict(X), class2.predict(X)])
     np.savetxt('project_data/' + name + '.txt', Ypred.T, fmt='%i', delimiter=',')
 
+def predict_and_print_ann(name, class1, class2, X):
+    ann2 = libfann.neural_net()
+    ann7 = libfann.neural_net()
+    ann2.create_from_file("project_data/ann2.0.net")
+    ann7.create_from_file("project_data/ann7.0.net")
+
+    Ypred = [[0,0]];
+    nrFeatures = max(X.shape)
+    for i in range(nrFeatures):
+        toAppend = [ann2.run(map(float,X[i,:].tolist()[0]))[0], ann2.run(map(float,X[i][0].tolist()[0]))[0]]
+        Ypred = np.append(Ypred,[toAppend],axis=0)
+    Ypred=Ypred[1:,:]
+    #X = X.tolist()
+    #Ypred =[class1(X), class2(X)]
+    np.savetxt('project_data/' + name + '.txt', Ypred.T, fmt='%i', delimiter=',')
 
 def lin_classifier(Xtrain, Ytrain):
     classifier = LinearSVC()
@@ -173,6 +205,74 @@ def svm_classifier(Xtrain, Ytrain):
     #return classifier
 
 
+
+def getNNData(XTrain, YTrain):
+    data_size = max(XTrain.shape)
+    nr_features = min(XTrain.shape)
+    nr_classes = 1
+    nndata=open("project_data/nndata.txt","w")
+    nndata.write("%d %d %d \n" % (data_size, nr_features, nr_classes))   #header
+    for i in range(data_size):
+        x_sub = XTrain[i,:]
+        x_arr = np.char.mod('%f', x_sub)
+        x_line = " ".join(x_arr)+"\n"
+        y_line = str(YTrain[i])+"\n"
+        nndata.write(x_line)
+        nndata.write(y_line)
+    nndata.close()
+    return "project_data/nndata.txt"
+
+
+def neuralnet_classifier(XTrain, YTrain):
+    data_size = max(XTrain.shape)
+    connection_rate = 1
+    neurons_per_hidden = 10
+    desired_error = 0.01
+    max_iterations = 100
+    its_per_round = 100
+    ann = libfann.neural_net()
+    ann.create_sparse_array(connection_rate, (min(XTrain.shape), neurons_per_hidden, 1)) #create...(rate, (in, hidden1, hidden2, out))
+    ann.set_training_algorithm(libfann.TRAIN_QUICKPROP)
+    ann.set_learning_rate(0.8)
+    #ann.set_activation_function_hidden(libfann.SIGMOID_SYMMETRIC)
+    ann.set_activation_function_output(libfann.LINEAR)
+
+    datafile = getNNData(XTrain, YTrain)
+    nndat_all = libfann.training_data()
+    nndat_all.read_train_from_file(datafile)
+    nndat_all.shuffle_train_data()
+    nndat_train = libfann.training_data(nndat_all)
+    nndat_test = libfann.training_data(nndat_all)
+    nndat_train.subset_train_data(0, int(np.ceil(0.85*data_size)))
+    nndat_test.subset_train_data(int(np.ceil(0.85*data_size)), int(np.floor(0.15*data_size)))
+    #ann.set_input_scaling_params(nndat_train, -1., 1.)
+    #ann.set_input_scaling_params(nndat_test, -1., 1.)
+    testE = 5; # mean square error
+    counter = 0; max_counter = 2;   #if more than max_counter times the error on testing data increased, stop
+    overfit = False
+    i = 0 #nr of runs of network updates
+    while i < max_iterations & ~overfit:
+        ann.train_on_data(nndat_train, its_per_round, 0, desired_error)
+        trainE_new = ann.test_data(nndat_train)
+        testE_new = ann.test_data(nndat_test)
+        if testE_new > testE:
+            counter = counter+1
+            if counter > max_counter:
+                overfit = True
+        trainE = trainE_new
+        testE = testE_new
+        i = i + its_per_round
+        if i % 1000 == 0:
+            print 'nr of epochs so far: %d; error on training set: %f; on test set: %f' % (i, trainE, testE)
+    print 'network has been trained in %d epochs; error on training set: %f; on test set: %f' % (i, trainE, testE)
+    print 'overfitting: '+str(overfit)
+    ann.save("project_data/ann"+str(max(YTrain))+".net")
+
+    return lambda x: round(ann.run(x))
+    #return ann
+
+
+
 def multi_classifier(classifiers):
     return {}
 
@@ -186,11 +286,15 @@ def regress(fn, name, X, Y, Xval, Xtestsub):
     class2 = fn(Xtrain, Ytrain[:, 1])
     print 'DEBUG: classifier trained'
 
-    print 'SCORE:', name, ' - trainset ', sumscore_classifier(class1, class2, Xtrain, Ytrain)
-    print 'SCORE:', name, ' - test ', sumscore_classifier(class1, class2, Xtest, Ytest)
+    #print 'SCORE:', name, ' - trainset ', sumscore_classifier(class1, class2, Xtrain, Ytrain)
+    #print 'SCORE:', name, ' - test ', sumscore_classifier(class1, class2, Xtest, Ytest)
+    print 'SCORE:', name, ' - trainset ', sumscore_classifier_ann(class1, class2, Xtrain, Ytrain)
+    print 'SCORE:', name, ' - test ', sumscore_classifier_ann(class1, class2, Xtest, Ytest)
 
-    predict_and_print('validate_y_' + name, class1, class2, Xval)
-    predict_and_print('test_y_' + name, class1, class2, Xtestsub)
+    #predict_and_print('validate_y_' + name, class1, class2, Xval)
+    #predict_and_print('test_y_' + name, class1, class2, Xtestsub)
+    predict_and_print_ann('validate_y_' + name, class1, class2, Xval)
+    predict_and_print_ann('test_y_' + name, class1, class2, Xtestsub)
 
 
 def regress_no_split(fn, name, X, Y, Xval, Xtestsub):
@@ -240,7 +344,8 @@ def read_and_regress(feature_fn):
 
     #regress(lin_classifier, 'lin', X, Y, Xval, Xtest)
     #regress(knn_classifier, 'knn', X, Y, Xval, Xtest)
-    regress_no_split(tree_classifier, 'tree', X, Y, Xval, Xtest)
+    #regress_no_split(tree_classifier, 'tree', X, Y, Xval, Xtest)
+    regress(neuralnet_classifier, 'ann', X, Y, Xval, Xtest)
     #regress(onevsone_classifier, 'onevsone', X, Y, Xval, Xtest)
     #regress_no_split(forest_classifier, 'forest', X, Y, Xval, Xtest)
     #regress_no_split(svm_classifier, 'svm', X, Y, Xval, Xtest)
