@@ -1,4 +1,5 @@
 .virtualenv
+.idea
 project_data/validate_y*.txt
 project_data/test_y*.txt
 report/report.aux
